@@ -2,7 +2,7 @@
 /**
  * Plugin Name: vlastni_formular
  * Plugin URI: https://github.com/JaromirMayer/vlastni_formular
- * Description: Formulář (jméno, příjmení, email, zpráva) s DB, admin rozhraním, filtrováním, exportem, hromadným mazáním, validací a ochranou proti spamu bez reCAPTCHA. Nově s možností připojení souborů, zasílání e-mailových příloh a automatických aktualizací.
+ * Description: Formulář (jméno, příjmení, email, zpráva, příloha) s DB, admin rozhraním, filtrováním, exportem, hromadným mazáním, validací a ochranou proti spamu bez reCAPTCHA.
  * Version: 1.2
  * Author: Jaromir Mayer
  * Author URI: https://github.com/JaromirMayer
