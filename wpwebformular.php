@@ -1,30 +1,35 @@
 <?php
 /**
- * Plugin Name: vlastni_formular
- * Plugin URI: https://github.com/JaromirMayer/vlastni_formular
- * Description: Formulář (jméno, příjmení, email, zpráva, příloha) s DB, admin rozhraním, filtrováním, exportem, hromadným mazáním, validací a ochranou proti spamu bez reCAPTCHA.
- * Version: 1.3
+ * Plugin Name: WPwebformular
+ * Plugin URI: https://github.com/JaromirMayer/wpwebformular
+ * Description: Formulář (jméno, příjmení, email, zpráva) s DB, admin rozhraním, filtrováním, exportem, hromadným mazáním, validací a ochranou proti spamu bez reCAPTCHA. Nově s možností připojení souborů, zasílání e-mailových příloh.
+ * Version: 1.4
  * Author: Jaromir Mayer
  * Author URI: https://github.com/JaromirMayer
- * Text Domain: vlastni_formular
+ * Text Domain: wpwebformular
  * Domain Path: /languages
  */
 
 // Zajištění automatických aktualizací přes GitHub
-if (!class_exists('Puc_v4_Factory')) {
-    require_once plugin_dir_path(__FILE__) . 'plugin-update-checker/plugin-update-checker.php';
-}
-$updateChecker = Puc_v4_Factory::buildUpdateChecker(
-    'https://api.github.com/repos/JaromirMayer/vlastni_formular', // URL repozitáře
-    __FILE__, // hlavní plugin soubor
-    'vlastni_formular' // slug pluginu
-);
-$updateChecker->setBranch('main');
+// if (!class_exists('Puc_v4_Factory')) {
+//    require_once plugin_dir_path(__FILE__) . 'plugin-update-checker/autoloader.php';
+//}
+//$updateChecker = Puc_v4_Factory::buildUpdateChecker(
+//    'https://api.github.com/repos/JaromirMayer/wpwebformular',
+//    __FILE__,
+//    'wpwebformular'
+//);
+//$updateChecker->setBranch('main');
+
+// URL pro přesměrování po úspěšném odeslání
+define('WPWEBFORMULAR_FIRST_REDIRECT', 'https://www.solitare.eu/presmerovani');
+// URL pro druhé přesměrování po 3 sekundách
+define('WPWEBFORMULAR_SECOND_REDIRECT', 'http://www.solitare.eu');
 
 // 1) Aktivace: vytvoření DB tabulky
 register_activation_hook(__FILE__, function() {
     global $wpdb;
-    $table = $wpdb->prefix . 'vlastni_formular';
+    $table = $wpdb->prefix . 'wpwebformular';
     $charset = $wpdb->get_charset_collate();
     $sql = "CREATE TABLE $table (
         id mediumint(9) NOT NULL AUTO_INCREMENT,
@@ -41,7 +46,7 @@ register_activation_hook(__FILE__, function() {
 });
 
 // 2) Shortcode pro formulář
-add_shortcode('vlastni_formular', function() {
+add_shortcode('wpwebformular', function() {
     ob_start(); ?>
     <style>
       .formular-box { background-color: #cce4f7; padding:20px; border-radius:8px; max-width:500px; }
@@ -51,31 +56,31 @@ add_shortcode('vlastni_formular', function() {
       .formular-box .hp { display:none; }
     </style>
     <form method="post" enctype="multipart/form-data" class="formular-box">
-      <?php wp_nonce_field('formular_nonce_action','formular_nonce'); ?>
+      <?php wp_nonce_field('wpwebformular_nonce_action','wpwebformular_nonce'); ?>
       <label>Jméno: <input type="text" name="jmeno" required></label>
       <label>Příjmení: <input type="text" name="prijmeni" required></label>
       <label>Email: <input type="email" name="email" required></label>
       <label>Zpráva: <textarea name="zprava" required></textarea></label>
       <label>Soubor: <input type="file" name="soubor"></label>
       <div class="hp"><label>Nevyplňujte toto pole: <input type="text" name="hp"></label></div>
-      <input type="submit" name="formular_submit" value="Odeslat">
+      <input type="submit" name="wpwebformular_submit" value="Odeslat">
     </form>
     <?php
-    if(isset($_POST['formular_submit'])) formular_handle_submission();
+    if(isset($_POST['wpwebformular_submit'])) wpwebformular_handle_submission();
     return ob_get_clean();
 });
 
-// 3) Zpracování odeslání
-function formular_handle_submission() {
-    if(!isset($_POST['formular_nonce']) || !wp_verify_nonce($_POST['formular_nonce'],'formular_nonce_action')) {
-      echo '<p>Ověření selhalo.</p>'; return;
+// 3) Zpracování odeslání a přesměrování
+function wpwebformular_handle_submission() {
+    if(!isset($_POST['wpwebformular_nonce']) || !wp_verify_nonce($_POST['wpwebformular_nonce'],'wpwebformular_nonce_action')) {
+      wp_die('Ověření selhalo.', 'Error', ['response'=>403]);
     }
     if(!empty($_POST['hp'])) {
-      echo '<p>Spam detekován.</p>'; return;
+      wp_die('Spam detekován.', 'Error', ['response'=>403]);
     }
 
     global $wpdb;
-    $table = $wpdb->prefix.'vlastni_formular';
+    $table = $wpdb->prefix.'wpwebformular';
 
     $jmeno    = sanitize_text_field($_POST['jmeno']);
     $prijmeni = sanitize_text_field($_POST['prijmeni']);
@@ -85,7 +90,7 @@ function formular_handle_submission() {
     $attachment_file = '';
 
     if(!is_email($email)) {
-      echo '<p>Neplatný email.</p>'; return;
+      wp_die('Neplatný email.', 'Error', ['response'=>400]);
     }
 
     // Nahrání souboru
@@ -98,11 +103,12 @@ function formular_handle_submission() {
         }
     }
 
+    // Uložení do DB
     $wpdb->insert($table, compact('jmeno','prijmeni','email','zprava','attachment_url'));
 
     // Příprava e-mailu
     $admin_email = get_option('admin_email');
-    $subject = 'Nový záznam z formuláře';
+    $subject = 'Nový záznam z WPwebformular';
     $body = "Jméno: $jmeno\nPříjmení: $prijmeni\nEmail: $email\n\nZpráva:\n$zprava";
     $attachments = $attachment_file ? [$attachment_file] : [];
 
@@ -110,19 +116,21 @@ function formular_handle_submission() {
     wp_mail($admin_email, $subject, $body, [], $attachments);
     wp_mail($email, 'Kopie vašeho odeslaného formuláře', $body, [], $attachments);
 
-    echo '<p>Děkujeme, váš formulář byl odeslán.</p>';
+    // První přesměrování a následný refresh
+    wp_redirect(WPWEBFORMULAR_FIRST_REDIRECT);
+    header('Refresh: 3; url=' . esc_url(WPWEBFORMULAR_SECOND_REDIRECT));
+    exit;
 }
 
 // 4) Admin rozhraní
 add_action('admin_menu', function(){
-    add_menu_page('Formulář Data','Formulář','manage_options','formular-admin','formular_admin_page','dashicons-feedback',25);
+    add_menu_page('WPwebformular Data','WPwebformular','manage_options','wpwebformular-admin','wpwebformular_admin_page','dashicons-feedback',25);
 });
 
-function formular_admin_page() {
+function wpwebformular_admin_page() {
     global $wpdb;
-    $table = $wpdb->prefix.'vlastni_formular';
+    $table = $wpdb->prefix.'wpwebformular';
 
-    // Hromadné mazání
     if(!empty($_POST['delete_ids']) && is_array($_POST['delete_ids'])) {
       foreach($_POST['delete_ids'] as $id) {
         $wpdb->delete($table, ['id'=>intval($id)]);
@@ -130,7 +138,6 @@ function formular_admin_page() {
       echo '<div class="updated"><p>Záznamy smazány.</p></div>';
     }
 
-    // Filtrování
     $where = "1=1";
     foreach(['jmeno','prijmeni','email'] as $f) {
       if(!empty($_GET["filter_$f"])) {
@@ -139,7 +146,6 @@ function formular_admin_page() {
       }
     }
 
-    // Export CSV
     if(isset($_POST['export_csv'])) {
       $rows = $wpdb->get_results("SELECT * FROM $table WHERE $where ORDER BY created_at DESC", ARRAY_A);
       header('Content-Type:text/csv; charset=utf-8');
@@ -153,13 +159,13 @@ function formular_admin_page() {
 
     $results = $wpdb->get_results("SELECT * FROM $table WHERE $where ORDER BY created_at DESC");
 
-    echo '<div class="wrap"><h1>Správa formulářů</h1>';
-    echo '<form method="get"><input type="hidden" name="page" value="formular-admin">';
+    echo '<div class="wrap"><h1>Správa WPwebformular</h1>';
+    echo '<form method="get"><input type="hidden" name="page" value="wpwebformular-admin">';
     foreach(['jmeno'=>'Jméno','prijmeni'=>'Příjmení','email'=>'Email'] as $f=>$label) {
       echo "$label: <input type=\"text\" name=\"filter_$f\" value=\"".esc_attr($_GET["filter_$f"]??'')."\"> ";
     }
     echo '<input type="submit" class="button button-primary" value="Filtrovat"> ';
-    echo '<a href="'.admin_url('admin.php?page=formular-admin').'" class="button">Zrušit filtr</a></form><br>';
+    echo '<a href="'.admin_url('admin.php?page=wpwebformular-admin').'" class="button">Zrušit filtr</a></form><br>';
 
     echo '<form method="post">';
     echo '<input type="submit" name="export_csv" class="button button-secondary" value="Export CSV"> ';
